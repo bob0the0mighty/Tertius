@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Tertius</string>
+    <string name="take_picture">Take Picture</string>
+    <string name="post_picture">Post Picture</string>
+
+</resources>
