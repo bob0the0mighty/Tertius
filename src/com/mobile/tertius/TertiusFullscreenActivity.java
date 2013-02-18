@@ -2,8 +2,6 @@ package com.mobile.tertius;
 
 import java.io.File;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 
 import android.annotation.SuppressLint;
@@ -59,10 +57,10 @@ public class TertiusFullscreenActivity extends Activity {
 	private static final int			HIDER_FLAGS							= SystemUiHider.FLAG_HIDE_NAVIGATION;
 
 	private static final String		FILE_PREFIX							= "pic";
-	
-	private static final String   PRE											= "pre";
-	
-	private static final String   CUR											= "cur";
+
+	private static final String		PRE											= "pre";
+
+	private static final String		CUR											= "cur";
 
 	private static final String		FILE_SUFFIX							= ".jpeg";
 
@@ -75,8 +73,10 @@ public class TertiusFullscreenActivity extends Activity {
 
 	private View									getPicture, sendPicture;
 
-	private Uri										currentFileLocation; 
-	private Uri 									previousFileLocation;
+	//previous in case user cancels from camera and we need to re-populate 
+	//current with a valid Uri.
+	private Uri										currentFileLocation;
+	private Uri										previousFileLocation;
 
 	@Override
 	protected void onCreate( Bundle savedInstanceState ) {
@@ -147,16 +147,18 @@ public class TertiusFullscreenActivity extends Activity {
 		findViewById( R.id.take_picture ).setOnTouchListener(
 				mDelayHideTouchListener );
 
-		//My code starts here, above all generated code.
+		// My code starts here, above all generated code.
 		getPicture = findViewById( R.id.take_picture );
 		sendPicture = findViewById( R.id.post_picture );
 
 		previousFileLocation 	= Uri.EMPTY;
-	  currentFileLocation 	= Uri.EMPTY;
-		
+		currentFileLocation 	= Uri.EMPTY;
+
 		if ( savedInstanceState != null ) {
-			previousFileLocation 	= Uri.parse( savedInstanceState.getString( PRE + FILE_PREFIX ) );
-			currentFileLocation 	= Uri.parse( savedInstanceState.getString( CUR + FILE_PREFIX ) );
+			previousFileLocation = Uri.parse( savedInstanceState.getString( PRE
+					+ FILE_PREFIX ) );
+			currentFileLocation = Uri.parse( savedInstanceState.getString( CUR
+					+ FILE_PREFIX ) );
 		}
 
 		setClickListeners();
@@ -178,24 +180,24 @@ public class TertiusFullscreenActivity extends Activity {
 	 * interacting with activity UI.
 	 */
 	View.OnTouchListener	mDelayHideTouchListener	= new View.OnTouchListener() {
-																									@Override
-																									public boolean onTouch(
-																											View view,
-																											MotionEvent motionEvent ) {
-																										if ( AUTO_HIDE ) {
-																											delayedHide( AUTO_HIDE_DELAY_MILLIS );
-																										}
-																										return false;
-																									}
-																								};
+		@Override
+		public boolean onTouch(
+				View view,
+				MotionEvent motionEvent ) {
+			if ( AUTO_HIDE ) {
+				delayedHide( AUTO_HIDE_DELAY_MILLIS );
+			}
+			return false;
+		}
+	};
 
-	Handler								mHideHandler						= new Handler();
-	Runnable							mHideRunnable						= new Runnable() {
-																									@Override
-																									public void run() {
-																										mSystemUiHider.hide();
-																									}
-																								};
+	Handler		mHideHandler						= new Handler();
+	Runnable	mHideRunnable						= new Runnable() {
+																				@Override
+																				public void run() {
+																					mSystemUiHider.hide();
+																				}
+																			};
 
 	/**
 	 * Schedules a call to hide() in [delay] milliseconds, canceling any
@@ -205,13 +207,12 @@ public class TertiusFullscreenActivity extends Activity {
 		mHideHandler.removeCallbacks( mHideRunnable );
 		mHideHandler.postDelayed( mHideRunnable, delayMillis );
 	}
-
+	
 	@Override
 	public void onSaveInstanceState( Bundle bundle ) {
 		super.onSaveInstanceState( bundle );
-		System.out.println(previousFileLocation.toString());
-		bundle.putString( PRE + FILE_PREFIX , previousFileLocation.toString() );
-		bundle.putString( CUR + FILE_PREFIX , currentFileLocation.toString() );
+		bundle.putString( PRE + FILE_PREFIX, previousFileLocation.toString() );
+		bundle.putString( CUR + FILE_PREFIX, currentFileLocation.toString() );
 	}
 
 	private void setClickListeners() {
@@ -222,6 +223,7 @@ public class TertiusFullscreenActivity extends Activity {
 			}
 		} );
 
+		//if no Uri availible do not enable button
 		sendPicture.setOnClickListener( new OnClickListener() {
 			public void onClick( View v ) {
 				if ( !currentFileLocation.equals( Uri.EMPTY ) ) {
@@ -234,6 +236,7 @@ public class TertiusFullscreenActivity extends Activity {
 	private void getPicture() {
 		Intent picturer = new Intent( MediaStore.ACTION_IMAGE_CAPTURE );
 
+		//ensure something can handle the intent
 		List< ResolveInfo > activities = getPackageManager().queryIntentActivities(
 				picturer, 0 );
 		boolean isIntentSafe = activities.size() > 0;
@@ -241,6 +244,9 @@ public class TertiusFullscreenActivity extends Activity {
 		if ( isIntentSafe ) {
 			if ( canUseExternalStorage() ) {
 				try {
+					//put Uri of file into picture taking intent.  Needed for full quality 
+					//images.  Note: Causes data in onActivityResult to return null so
+					//must store Uri locally and persist manually
 					picturer.putExtra( MediaStore.EXTRA_OUTPUT,
 							Uri.fromFile( createImageFile() ) );
 					startActivityForResult( picturer, GET_PICTURE );
@@ -256,6 +262,7 @@ public class TertiusFullscreenActivity extends Activity {
 		}
 	}
 
+	//Media Mounted is equivalent to RW permission it seems
 	private boolean canUseExternalStorage() {
 		String state = Environment.getExternalStorageState();
 		if ( Environment.MEDIA_MOUNTED.equals( state ) ) {
@@ -265,29 +272,25 @@ public class TertiusFullscreenActivity extends Activity {
 		}
 	}
 
+	//
 	@SuppressLint( "SimpleDateFormat" )
 	private File createImageFile() throws IOException {
-		//Find local shared pictures directory and ensure it exists
+		// Find local shared pictures directory and ensure it exists
 		File path = Environment
 				.getExternalStoragePublicDirectory( Environment.DIRECTORY_PICTURES );
 		path.mkdir();
 
-		// Create an image file name
-		String timeStamp = new SimpleDateFormat( "yyyyMMdd_HHmmss" )
-				.format( new Date() );
-		String imagefileLocation = FILE_PREFIX + timeStamp + "_";
+		// create image file
+		File image = File.createTempFile( FILE_PREFIX, FILE_SUFFIX, path );
 
-		//create image file
-		File image = File.createTempFile( imagefileLocation, FILE_SUFFIX, path );
-
-		//for dealing with canceled images
-		if( !currentFileLocation.equals( Uri.EMPTY ) ) {
+		// for dealing with canceled images
+		if ( !currentFileLocation.equals( Uri.EMPTY ) ) {
 			previousFileLocation = currentFileLocation;
-		} 
-		
-		//get file location for later use
-		currentFileLocation = Uri.fromFile( image );//.getPath();
+		}
 
+		// get file location for later use
+		currentFileLocation = Uri.fromFile( image );
+		
 		return image;
 	}
 
@@ -302,11 +305,12 @@ public class TertiusFullscreenActivity extends Activity {
 		if ( requestCode == GET_PICTURE ) {
 			ImageView iv = (ImageView) findViewById( R.id.imageView1 );
 			if ( resultCode == RESULT_OK ) {
-				System.out.println(currentFileLocation.getPath());
-				iv.setImageBitmap( BitmapFactory.decodeFile( currentFileLocation.getPath() ) );
+				iv.setImageBitmap( BitmapFactory.decodeFile( currentFileLocation
+						.getPath() ) );
 			} else {
+				//Image acquisition canceled.  Use previous or inital image for display
 				currentFileLocation = previousFileLocation;
-				if( currentFileLocation.equals( Uri.EMPTY ) ){
+				if ( currentFileLocation.equals( Uri.EMPTY ) ) {
 					iv.setImageDrawable( getResources().getDrawable( R.drawable.castle ) );
 				}
 			}
