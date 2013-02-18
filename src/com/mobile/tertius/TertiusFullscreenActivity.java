@@ -1,12 +1,28 @@
 package com.mobile.tertius;
 
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
+import android.provider.MediaStore;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.ImageView;
 
 import com.mobile.tertius.util.SystemUiHider;
 
@@ -17,6 +33,9 @@ import com.mobile.tertius.util.SystemUiHider;
  * @see SystemUiHider
  */
 public class TertiusFullscreenActivity extends Activity {
+
+	static final int							GET_PICTURE							= 1;
+
 	/**
 	 * Whether or not the system UI should be auto-hidden after
 	 * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
@@ -40,10 +59,18 @@ public class TertiusFullscreenActivity extends Activity {
 	 */
 	private static final int			HIDER_FLAGS							= SystemUiHider.FLAG_HIDE_NAVIGATION;
 
+	private static final String		FILE_PREFIX					= "great_pic";
+
+	private static final String		FILE_SUFFIX							= ".jpg";
+
 	/**
 	 * The instance of the {@link SystemUiHider} for this activity.
 	 */
 	private SystemUiHider					mSystemUiHider;
+
+	private View									getPicture, sendPicture;
+
+	private String								fileName;
 
 	@Override
 	protected void onCreate( Bundle savedInstanceState ) {
@@ -113,6 +140,15 @@ public class TertiusFullscreenActivity extends Activity {
 		// while interacting with the UI.
 		findViewById( R.id.take_picture ).setOnTouchListener(
 				mDelayHideTouchListener );
+
+		getPicture = findViewById( R.id.take_picture );
+		sendPicture = findViewById( R.id.post_picture );
+
+		if( savedInstanceState != null ){
+			fileName = savedInstanceState.getString( FILE_PREFIX );
+		}
+		
+		setClickListeners();
 	}
 
 	@Override
@@ -158,4 +194,97 @@ public class TertiusFullscreenActivity extends Activity {
 		mHideHandler.removeCallbacks( mHideRunnable );
 		mHideHandler.postDelayed( mHideRunnable, delayMillis );
 	}
+
+	@Override
+	public void onSaveInstanceState( Bundle bundle ) {
+		super.onSaveInstanceState( bundle );
+		bundle.putString( FILE_PREFIX, fileName );
+	}
+
+	private void setClickListeners() {
+
+		getPicture.setOnClickListener( new OnClickListener() {
+			public void onClick( View v ) {
+				getPicture();
+			}
+		} );
+
+		sendPicture.setOnClickListener( new OnClickListener() {
+			public void onClick( View v ) {
+				postPicture();
+			}
+		} );
+	}
+
+	private void getPicture() {
+		Intent picturer = new Intent( MediaStore.ACTION_IMAGE_CAPTURE );
+
+		PackageManager packageManager = getPackageManager();
+		List< ResolveInfo > activities = packageManager.queryIntentActivities(
+				picturer, 0 );
+		boolean isIntentSafe = activities.size() > 0;
+
+		if ( isIntentSafe ) {
+			
+			if ( canUseExternalStorage() ) {
+				try {
+					File f = createImageFile();
+					
+					picturer.putExtra( MediaStore.EXTRA_OUTPUT, Uri.fromFile( f ) );
+					startActivityForResult( picturer, GET_PICTURE );
+				}
+				catch ( IOException ex ) {
+					System.err.println( "Error creating temp image" );
+				}
+			} else {
+				System.err.println( "No external storage access" );
+			}
+
+		} else {
+			System.err.println( "No camera availible" );
+		}
+
+	}
+
+	private boolean canUseExternalStorage() {
+		String state = Environment.getExternalStorageState();
+		if ( Environment.MEDIA_MOUNTED.equals( state ) ) {
+			return true;
+		} else {
+			return false;
+		}
+
+	}
+
+	private File createImageFile() throws IOException {
+		File path = Environment.getExternalStoragePublicDirectory( Environment.DIRECTORY_PICTURES );
+		path.mkdir();
+
+		// Create an image file name
+		String timeStamp = new SimpleDateFormat( "yyyyMMdd_HHmmss" )
+				.format( new Date() );
+		String imageFileName = FILE_PREFIX + timeStamp + "_";
+
+		File image = File.createTempFile( imageFileName, FILE_SUFFIX, path );
+		
+		fileName = image.getPath();
+		
+		return image;
+	}
+
+	private void postPicture() {
+
+	}
+
+	protected void onActivityResult( int requestCode, int resultCode, Intent data ) {
+		if ( requestCode == GET_PICTURE ) {
+			if ( resultCode == RESULT_OK ) {
+				Bitmap image = BitmapFactory.decodeFile( fileName );
+				
+				ImageView iv = (ImageView) findViewById( R.id.imageView1 );
+				iv.setImageBitmap( image );
+			}
+		}
+	}
+
 }
