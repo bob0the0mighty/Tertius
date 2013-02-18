@@ -6,12 +6,11 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
@@ -59,9 +58,15 @@ public class TertiusFullscreenActivity extends Activity {
 	 */
 	private static final int			HIDER_FLAGS							= SystemUiHider.FLAG_HIDE_NAVIGATION;
 
-	private static final String		FILE_PREFIX					= "great_pic";
+	private static final String		FILE_PREFIX							= "pic";
+	
+	private static final String   PRE											= "pre";
+	
+	private static final String   CUR											= "cur";
 
-	private static final String		FILE_SUFFIX							= ".jpg";
+	private static final String		FILE_SUFFIX							= ".jpeg";
+
+	private static final String		JPEG										= "image/jpeg";
 
 	/**
 	 * The instance of the {@link SystemUiHider} for this activity.
@@ -70,7 +75,8 @@ public class TertiusFullscreenActivity extends Activity {
 
 	private View									getPicture, sendPicture;
 
-	private String								fileName;
+	private Uri										currentFileLocation; 
+	private Uri 									previousFileLocation;
 
 	@Override
 	protected void onCreate( Bundle savedInstanceState ) {
@@ -141,13 +147,18 @@ public class TertiusFullscreenActivity extends Activity {
 		findViewById( R.id.take_picture ).setOnTouchListener(
 				mDelayHideTouchListener );
 
+		//My code starts here, above all generated code.
 		getPicture = findViewById( R.id.take_picture );
 		sendPicture = findViewById( R.id.post_picture );
 
-		if( savedInstanceState != null ){
-			fileName = savedInstanceState.getString( FILE_PREFIX );
-		}
+		previousFileLocation 	= Uri.EMPTY;
+	  currentFileLocation 	= Uri.EMPTY;
 		
+		if ( savedInstanceState != null ) {
+			previousFileLocation 	= Uri.parse( savedInstanceState.getString( PRE + FILE_PREFIX ) );
+			currentFileLocation 	= Uri.parse( savedInstanceState.getString( CUR + FILE_PREFIX ) );
+		}
+
 		setClickListeners();
 	}
 
@@ -198,7 +209,9 @@ public class TertiusFullscreenActivity extends Activity {
 	@Override
 	public void onSaveInstanceState( Bundle bundle ) {
 		super.onSaveInstanceState( bundle );
-		bundle.putString( FILE_PREFIX, fileName );
+		System.out.println(previousFileLocation.toString());
+		bundle.putString( PRE + FILE_PREFIX , previousFileLocation.toString() );
+		bundle.putString( CUR + FILE_PREFIX , currentFileLocation.toString() );
 	}
 
 	private void setClickListeners() {
@@ -211,7 +224,9 @@ public class TertiusFullscreenActivity extends Activity {
 
 		sendPicture.setOnClickListener( new OnClickListener() {
 			public void onClick( View v ) {
-				postPicture();
+				if ( !currentFileLocation.equals( Uri.EMPTY ) ) {
+					postPicture();
+				}
 			}
 		} );
 	}
@@ -219,18 +234,15 @@ public class TertiusFullscreenActivity extends Activity {
 	private void getPicture() {
 		Intent picturer = new Intent( MediaStore.ACTION_IMAGE_CAPTURE );
 
-		PackageManager packageManager = getPackageManager();
-		List< ResolveInfo > activities = packageManager.queryIntentActivities(
+		List< ResolveInfo > activities = getPackageManager().queryIntentActivities(
 				picturer, 0 );
 		boolean isIntentSafe = activities.size() > 0;
 
 		if ( isIntentSafe ) {
-			
 			if ( canUseExternalStorage() ) {
 				try {
-					File f = createImageFile();
-					
-					picturer.putExtra( MediaStore.EXTRA_OUTPUT, Uri.fromFile( f ) );
+					picturer.putExtra( MediaStore.EXTRA_OUTPUT,
+							Uri.fromFile( createImageFile() ) );
 					startActivityForResult( picturer, GET_PICTURE );
 				}
 				catch ( IOException ex ) {
@@ -239,11 +251,9 @@ public class TertiusFullscreenActivity extends Activity {
 			} else {
 				System.err.println( "No external storage access" );
 			}
-
 		} else {
 			System.err.println( "No camera availible" );
 		}
-
 	}
 
 	private boolean canUseExternalStorage() {
@@ -253,38 +263,53 @@ public class TertiusFullscreenActivity extends Activity {
 		} else {
 			return false;
 		}
-
 	}
 
+	@SuppressLint( "SimpleDateFormat" )
 	private File createImageFile() throws IOException {
-		File path = Environment.getExternalStoragePublicDirectory( Environment.DIRECTORY_PICTURES );
+		//Find local shared pictures directory and ensure it exists
+		File path = Environment
+				.getExternalStoragePublicDirectory( Environment.DIRECTORY_PICTURES );
 		path.mkdir();
 
 		// Create an image file name
 		String timeStamp = new SimpleDateFormat( "yyyyMMdd_HHmmss" )
 				.format( new Date() );
-		String imageFileName = FILE_PREFIX + timeStamp + "_";
+		String imagefileLocation = FILE_PREFIX + timeStamp + "_";
 
-		File image = File.createTempFile( imageFileName, FILE_SUFFIX, path );
+		//create image file
+		File image = File.createTempFile( imagefileLocation, FILE_SUFFIX, path );
+
+		//for dealing with canceled images
+		if( !currentFileLocation.equals( Uri.EMPTY ) ) {
+			previousFileLocation = currentFileLocation;
+		} 
 		
-		fileName = image.getPath();
-		
+		//get file location for later use
+		currentFileLocation = Uri.fromFile( image );//.getPath();
+
 		return image;
 	}
 
 	private void postPicture() {
-
+		Intent send = new Intent( Intent.ACTION_SEND );
+		send.setType( JPEG );
+		send.putExtra( Intent.EXTRA_STREAM, currentFileLocation );
+		startActivity( send );
 	}
 
 	protected void onActivityResult( int requestCode, int resultCode, Intent data ) {
 		if ( requestCode == GET_PICTURE ) {
+			ImageView iv = (ImageView) findViewById( R.id.imageView1 );
 			if ( resultCode == RESULT_OK ) {
-				Bitmap image = BitmapFactory.decodeFile( fileName );
-				
-				ImageView iv = (ImageView) findViewById( R.id.imageView1 );
-				iv.setImageBitmap( image );
+				System.out.println(currentFileLocation.getPath());
+				iv.setImageBitmap( BitmapFactory.decodeFile( currentFileLocation.getPath() ) );
+			} else {
+				currentFileLocation = previousFileLocation;
+				if( currentFileLocation.equals( Uri.EMPTY ) ){
+					iv.setImageDrawable( getResources().getDrawable( R.drawable.castle ) );
+				}
 			}
 		}
 	}
-
 }
